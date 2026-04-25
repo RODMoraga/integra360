@@ -72,6 +72,11 @@ const baseEnvSchema = z.object({
     .string()
     .default("http://localhost:5173")
     .describe("Allowed CORS origin(s), comma-separated for multiple"),
+  API_PUBLIC_BASE_URL: z
+    .union([z.string().url(), z.literal("")])
+    .optional()
+    .transform((v) => (v === "" ? undefined : v))
+    .describe("Public base URL for API docs/server metadata (e.g. https://api.integra360.com)"),
   CORS_METHODS: z
     .string()
     .default("GET,HEAD,PUT,PATCH,POST,DELETE")
@@ -344,10 +349,9 @@ const baseEnvSchema = z.object({
   // Error Tracking
   // ============================================================================
   SENTRY_DSN: z
-    .string()
-    .url()
+    .union([z.string().url(), z.literal("")])
     .optional()
-    .describe("Sentry error tracking URL"),
+    .describe("Sentry error tracking URL or empty string"),
   SENTRY_ENVIRONMENT: z
     .enum(["development", "staging", "production"])
     .optional()
