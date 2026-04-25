@@ -21,3 +21,177 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+// -----------------------------------------------------------------------------
+// Gradual multi-tenant integration (new modules)
+// NOTE: Legacy model User is preserved to avoid breaking current backend flows.
+// -----------------------------------------------------------------------------
+
+model Company {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  code         String    @unique @db.VarChar(40)
+  legalName    String    @map("legal_name") @db.VarChar(180)
+  tradeName    String?   @map("trade_name") @db.VarChar(180)
+  taxId        String    @map("tax_id") @unique @db.VarChar(30)
+  timezone     String    @default("America/Santiago") @db.VarChar(80)
+  currencyCode String    @default("CLP") @map("currency_code") @db.Char(3)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  users         BizUser[]
+  roles         Role[]
+  uoms          UnitOfMeasure[]
+  unitConversions UnitConversion[]
+  paymentMethod PaymentMethod[]
+
+  @@map("companies")
+}
+
+model BizUser {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  companyId    BigInt    @map("company_id") @db.UnsignedBigInt
+  fullName     String    @map("full_name") @db.VarChar(160)
+  email        String    @db.VarChar(160)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  userRoles UserRoleX[]
+
+  @@unique([companyId, email], map: "uk_users_company_email")
+  @@index([companyId, isActive], map: "idx_users_company_active")
+  @@map("users")
+}
+
+model Role {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  companyId   BigInt    @map("company_id") @db.UnsignedBigInt
+  code        String    @db.VarChar(50)
+  name        String    @db.VarChar(100)
+  description String?   @db.VarChar(255)
+  isSystem    Boolean   @default(false) @map("is_system")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company         Company            @relation(fields: [companyId], references: [id])
+  userRoles       UserRoleX[]
+  rolePermissions RolePermissionX[]
+
+  @@unique([companyId, code], map: "uk_roles_company_code")
+  @@index([companyId], map: "idx_roles_company")
+  @@map("roles")
+}
+
+model Permission {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  code        String    @unique @db.VarChar(80)
+  name        String    @db.VarChar(120)
+  moduleName  String    @map("module_name") @db.VarChar(80)
+  description String?   @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  rolePermissions RolePermissionX[]
+
+  @@index([moduleName], map: "idx_permissions_module")
+  @@map("permissions")
+}
+
+model UserRoleX {
+  userId     BigInt   @map("user_id") @db.UnsignedBigInt
+  roleId     BigInt   @map("role_id") @db.UnsignedBigInt
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy BigInt?  @map("assigned_by") @db.UnsignedBigInt
+
+  user BizUser @relation(fields: [userId], references: [id])
+  role Role    @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermissionX {
+  roleId       BigInt   @map("role_id") @db.UnsignedBigInt
+  permissionId BigInt   @map("permission_id") @db.UnsignedBigInt
+  grantedAt    DateTime @default(now()) @map("granted_at")
+  grantedBy    BigInt?  @map("granted_by") @db.UnsignedBigInt
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UnitOfMeasure {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  companyId  BigInt    @map("company_id") @db.UnsignedBigInt
+  code       String    @db.VarChar(20)
+  name       String    @db.VarChar(80)
+  symbol     String    @db.VarChar(20)
+  unitType   String    @map("unit_type") @db.VarChar(40)
+  isBaseUnit Boolean   @default(false) @map("is_base_unit")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  company       Company           @relation(fields: [companyId], references: [id])
+  fromRelations UnitConversion[] @relation("from_unit")
+  toRelations   UnitConversion[] @relation("to_unit")
+
+  @@unique([companyId, code], map: "uk_uom_company_code")
+  @@index([companyId, unitType], map: "idx_uom_company_type")
+  @@map("units_of_measure")
+}
+
+model UnitConversion {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  companyId  BigInt   @map("company_id") @db.UnsignedBigInt
+  fromUnitId BigInt   @map("from_unit_id") @db.UnsignedBigInt
+  toUnitId   BigInt   @map("to_unit_id") @db.UnsignedBigInt
+  factor     Decimal  @db.Decimal(18, 8)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  company  Company       @relation(fields: [companyId], references: [id])
+  fromUnit UnitOfMeasure @relation("from_unit", fields: [fromUnitId], references: [id])
+  toUnit   UnitOfMeasure @relation("to_unit", fields: [toUnitId], references: [id])
+
+  @@unique([companyId, fromUnitId, toUnitId], map: "uk_unit_conversions_pair")
+  @@map("unit_conversions")
+}
+
+model PaymentMethod {
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  companyId         BigInt    @map("company_id") @db.UnsignedBigInt
+  code              String    @db.VarChar(30)
+  name              String    @db.VarChar(80)
+  requiresReference Boolean   @default(false) @map("requires_reference")
+  isCash            Boolean   @default(false) @map("is_cash")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, code], map: "uk_payment_methods_company_code")
+  @@map("payment_methods")
+}
+
+model DocumentType {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  code            String   @unique @db.VarChar(30)
+  name            String   @db.VarChar(120)
+  counterpartScope String  @map("counterpart_scope") @db.VarChar(20)
+  affectsInventory Boolean @default(false) @map("affects_inventory")
+  affectsAccounting Boolean @default(false) @map("affects_accounting")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("document_types")
+}

@@ -7,6 +7,8 @@
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
+    "db:e2e": "powershell -ExecutionPolicy Bypass -File ./scripts/run-db-e2e.ps1",
+    "db:e2e:persist": "powershell -ExecutionPolicy Bypass -File ./scripts/run-db-e2e.ps1 -PersistData",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

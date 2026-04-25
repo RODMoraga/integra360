@@ -35,7 +35,7 @@ npm run prisma:seed
 npm run dev
 ```
 
-Backend disponible en `http://localhost:3000`.
+Backend disponible en `http://localhost:3001`.
 
 ### 2) Frontend
 
@@ -123,6 +123,57 @@ El proyecto está configurado para Chile con:
 docker compose up --build
 ```
 
+## Capa de Negocio y Modelo de Datos Multi-tenant
+
+Se incorporó un diseño relacional robusto, multiempresa y desacoplado para soportar rubros como botillería, minimarket, lavandería y ferretería.
+
+### Scripts versionados
+
+- Modelo base: `backend/database/migrations/20260425_001_multi_tenant_schema.sql`
+- Reglas de negocio (funciones, procedures, triggers): `backend/database/migrations/20260425_002_business_logic.sql`
+- Estrategia de performance (índices y plantillas de particionamiento): `backend/database/migrations/20260425_003_performance_strategy.sql`
+- Semilla de catálogos base (roles, permisos, UOM, métodos de pago): `backend/database/migrations/20260425_004_seed_base_catalogs.sql`
+
+### Documentación técnica
+
+- ERD: `docs/database/ERD.md`
+- Diccionario de datos: `docs/database/DATA_DICTIONARY.md`
+- Reglas de negocio: `docs/database/BUSINESS_RULES.md`
+
+### Ejecución sugerida de scripts
+
+```bash
+mysql -u root -p integra360 < backend/database/migrations/20260425_001_multi_tenant_schema.sql
+mysql -u root -p integra360 < backend/database/migrations/20260425_002_business_logic.sql
+mysql -u root -p integra360 < backend/database/migrations/20260425_003_performance_strategy.sql
+mysql -u root -p integra360 < backend/database/migrations/20260425_004_seed_base_catalogs.sql
+
+# Sembrar catálogos para una empresa específica
+# CALL sp_seed_base_catalogs(<company_id>, <user_id>);
+
+# Prueba E2E compra/venta/cierre caja
+mysql -u root -p integra360 < backend/database/tests/20260425_e2e_validation.sql
+```
+
+Notas E2E:
+- El script crea un tenant temporal por corrida usando prefijo timestamp.
+- Por defecto ejecuta `ROLLBACK` al final, por lo que no acumula datos.
+- Si necesitas persistir datos para inspección manual, edita `backend/database/tests/20260425_e2e_validation.sql` y cambia `SET @persist_data = 0;` a `1`.
+
+### Script CI-ready (PowerShell)
+
+Ejecuta migraciones + seed + E2E con asserts automáticos. Si algo falla, termina con error.
+
+```powershell
+cd backend
+.\scripts\run-db-e2e.ps1
+```
+
+Opciones útiles:
+
+- `-PersistData`: usa COMMIT en la prueba E2E para dejar datos de inspección.
+- `-KeepDatabase`: no recrea la base antes de correr (por defecto sí la recrea para ejecución determinística en CI).
+
 ## Endpoints base
 
 - `GET /api/v1/health`
@@ -132,8 +183,8 @@ docker compose up --build
 
 ## Documentacion API
 
-- Swagger UI: `http://localhost:3000/api-docs`
-- OpenAPI JSON: `http://localhost:3000/api-docs.json`
+- Swagger UI: `http://localhost:3001/api-docs`
+- OpenAPI JSON: `http://localhost:3001/api-docs.json`
 
 ### Seguridad de Swagger
 

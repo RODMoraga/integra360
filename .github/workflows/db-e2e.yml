@@ -1,0 +1,57 @@
+name: DB E2E Validation
+
+on:
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  db-e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: MySQL#2024$
+          MYSQL_DATABASE: integra360
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pMySQL#2024$"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Ensure mysql client is available
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+          mysql --version
+
+      - name: Run DB migrations + E2E assertions (rollback mode)
+        shell: pwsh
+        working-directory: backend
+        run: |
+          ./scripts/run-db-e2e.ps1 `
+            -MySqlPath "mysql" `
+            -DbUser "root" `
+            -DbPassword "MySQL#2024$" `
+            -DbHost "127.0.0.1" `
+            -DbPort 3306 `
+            -Database "integra360"
