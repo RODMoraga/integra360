@@ -10,6 +10,7 @@ import { logger } from "./common/logger/logger.js";
 import { apiRateLimiter } from "./common/middleware/rateLimiter.js";
 import { errorHandler } from "./common/middleware/errorHandler.js";
 import { authRoutes } from "./modules/auth/routes/auth.routes.js";
+import { productRoutes } from "./modules/product/routes/product.routes.js";
 import { productImageRoutes } from "./modules/product-image/routes/productImage.routes.js";
 import { userRoutes } from "./modules/user/routes/user.routes.js";
 
@@ -43,6 +44,7 @@ app.get("/api/v1/health", (_req, res) => {
 });
 
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/products", productRoutes);
 app.use("/api/v1/products", productImageRoutes);
 app.use("/api/v1/users", userRoutes);
 

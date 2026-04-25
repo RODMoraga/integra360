@@ -35,7 +35,7 @@ npm run prisma:seed
 npm run dev
 ```
 
-Backend disponible en `http://localhost:3001`.
+Backend disponible en `http://localhost:3000`.
 
 ### 2) Frontend
 
@@ -183,8 +183,8 @@ Opciones útiles:
 
 ## Documentacion API
 
-- Swagger UI: `http://localhost:3001/api-docs`
-- OpenAPI JSON: `http://localhost:3001/api-docs.json`
+- Swagger UI: `http://localhost:3000/api-docs`
+- OpenAPI JSON: `http://localhost:3000/api-docs.json`
 
 ### Seguridad de Swagger
 
