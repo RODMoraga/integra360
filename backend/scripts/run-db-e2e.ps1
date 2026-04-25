@@ -100,6 +100,7 @@ Invoke-MySql -Sql "SOURCE c:/Users/Rodrigo/OneDrive/Escritorio/snippets/vue/Inte
 Invoke-MySql -Sql "SOURCE c:/Users/Rodrigo/OneDrive/Escritorio/snippets/vue/Integra360/backend/database/migrations/20260425_002_business_logic.sql;"
 Invoke-MySql -Sql "SOURCE c:/Users/Rodrigo/OneDrive/Escritorio/snippets/vue/Integra360/backend/database/migrations/20260425_003_performance_strategy.sql;"
 Invoke-MySql -Sql "SOURCE c:/Users/Rodrigo/OneDrive/Escritorio/snippets/vue/Integra360/backend/database/migrations/20260425_005_product_images.sql;"
+Invoke-MySql -Sql "SOURCE c:/Users/Rodrigo/OneDrive/Escritorio/snippets/vue/Integra360/backend/database/migrations/20260425_006_products_extended_fields.sql;"
 Invoke-MySql -Sql "SOURCE c:/Users/Rodrigo/OneDrive/Escritorio/snippets/vue/Integra360/backend/database/migrations/20260425_004_seed_base_catalogs.sql;"
 
 $persistFlag = if ($PersistData) { 1 } else { 0 }

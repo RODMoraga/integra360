@@ -40,11 +40,12 @@ model Company {
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
-  users         BizUser[]
-  roles         Role[]
-  uoms          UnitOfMeasure[]
+  users           BizUser[]
+  roles           Role[]
+  uoms            UnitOfMeasure[]
   unitConversions UnitConversion[]
-  paymentMethod PaymentMethod[]
+  paymentMethod   PaymentMethod[]
+  products        Product[]
 
   @@map("companies")
 }
@@ -142,8 +143,9 @@ model UnitOfMeasure {
   deletedAt  DateTime? @map("deleted_at")
 
   company       Company           @relation(fields: [companyId], references: [id])
-  fromRelations UnitConversion[] @relation("from_unit")
-  toRelations   UnitConversion[] @relation("to_unit")
+  fromRelations UnitConversion[]  @relation("from_unit")
+  toRelations   UnitConversion[]  @relation("to_unit")
+  products      Product[]
 
   @@unique([companyId, code], map: "uk_uom_company_code")
   @@index([companyId, unitType], map: "idx_uom_company_type")
@@ -194,4 +196,73 @@ model DocumentType {
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@map("document_types")
+}
+
+// -----------------------------------------------------------------------------
+// Catalogue — Products
+// -----------------------------------------------------------------------------
+
+model Product {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  companyId     BigInt    @map("company_id") @db.UnsignedBigInt
+  sku           String    @db.VarChar(60)
+  barcode       String?   @db.VarChar(80)
+  name          String    @db.VarChar(180)
+  description   String?   @db.Text
+
+  // Catalogue references (nullable — look-ups not modelled in Prisma yet)
+  categoryId    BigInt?   @map("category_id") @db.UnsignedBigInt
+  subcategoryId BigInt?   @map("subcategory_id") @db.UnsignedBigInt
+  brandId       BigInt?   @map("brand_id") @db.UnsignedBigInt
+  modelId       BigInt?   @map("model_id") @db.UnsignedBigInt
+  baseUomId     BigInt    @map("base_uom_id") @db.UnsignedBigInt
+
+  // Taxes & type
+  taxRate       Decimal   @default(0) @map("tax_rate") @db.Decimal(8, 4)
+  isService     Boolean   @default(false) @map("is_service")
+
+  // ── NEW 006 ──────────────────────────────────────────────────────────────
+  // Pricing
+  costPrice     Decimal   @default(0) @map("cost_price") @db.Decimal(18, 4)
+  salePrice     Decimal   @default(0) @map("sale_price") @db.Decimal(18, 4)
+  minPrice      Decimal?  @map("min_price") @db.Decimal(18, 4)
+
+  // Weight / dimensions
+  weight        Decimal?  @db.Decimal(10, 4)
+  weightUnit    String?   @default("kg") @map("weight_unit") @db.VarChar(10)
+  widthCm       Decimal?  @map("width_cm") @db.Decimal(10, 4)
+  heightCm      Decimal?  @map("height_cm") @db.Decimal(10, 4)
+  depthCm       Decimal?  @map("depth_cm") @db.Decimal(10, 4)
+
+  // SEO / eCommerce
+  slug            String?  @db.VarChar(220)
+  metaTitle       String?  @map("meta_title") @db.VarChar(160)
+  metaDescription String?  @map("meta_description") @db.VarChar(320)
+  isFeatured      Boolean  @default(false) @map("is_featured")
+
+  // Stock control
+  trackInventory Boolean   @default(true) @map("track_inventory")
+  minStock       Decimal   @default(0) @map("min_stock") @db.Decimal(18, 4)
+  reorderPoint   Decimal?  @map("reorder_point") @db.Decimal(18, 4)
+
+  // Denormalised image cache (maintained by DB triggers)
+  thumbnailUrl  String?   @map("thumbnail_url") @db.VarChar(500)
+  imageCount    Int       @default(0) @map("image_count") @db.UnsignedSmallInt
+  // ─────────────────────────────────────────────────────────────────────────
+
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   BigInt?   @map("created_by") @db.UnsignedBigInt
+
+  company   Company       @relation(fields: [companyId], references: [id])
+  baseUom   UnitOfMeasure @relation(fields: [baseUomId], references: [id])
+
+  @@unique([companyId, sku], map: "uk_products_company_sku")
+  @@unique([companyId, barcode], map: "uk_products_company_barcode")
+  @@unique([companyId, slug], map: "uk_products_company_slug")
+  @@index([companyId, name], map: "idx_products_company_name")
+  @@index([companyId, isFeatured], map: "idx_products_featured")
+  @@map("products")
 }
