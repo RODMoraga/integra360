@@ -30,6 +30,9 @@ erDiagram
 
   COMPANIES ||--o{ PRODUCTS : owns
   PRODUCTS ||--o{ PRODUCT_VARIANTS : contains
+  COMPANIES ||--o{ DIGITAL_ASSETS : owns
+  PRODUCTS ||--o{ PRODUCT_IMAGES : has
+  DIGITAL_ASSETS ||--o{ PRODUCT_IMAGES : links
   UNITS_OF_MEASURE ||--o{ PRODUCTS : base_uom
 
   COMPANIES ||--o{ WAREHOUSES : owns
@@ -72,3 +75,4 @@ erDiagram
 - Migración modelo: [backend/database/migrations/20260425_001_multi_tenant_schema.sql](../../backend/database/migrations/20260425_001_multi_tenant_schema.sql)
 - Lógica de negocio: [backend/database/migrations/20260425_002_business_logic.sql](../../backend/database/migrations/20260425_002_business_logic.sql)
 - Estrategia performance: [backend/database/migrations/20260425_003_performance_strategy.sql](../../backend/database/migrations/20260425_003_performance_strategy.sql)
+- Extensión imágenes: [backend/database/migrations/20260425_005_product_images.sql](../../backend/database/migrations/20260425_005_product_images.sql)

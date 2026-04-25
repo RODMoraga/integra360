@@ -60,6 +60,20 @@
 - Propósito: producto base + variantes comercializables.
 - Campos clave: sku, barcode, cost_price, sale_price, attributes_json.
 
+### digital_assets
+- Propósito: repositorio de metadatos de archivos (imagenes y otros recursos).
+- Campos clave: storage_disk, storage_key, mime_type, size_bytes, width_px, height_px, sha256_hash.
+- Regla: no se guarda binario en BD; solo metadata y referencia al storage.
+- Restricciones: unicidad por company_id + storage_disk + storage_key; deduplicación opcional por hash.
+
+### product_images
+- Propósito: asociar una o multiples imagenes a cada producto, con rol y orden.
+- Campos clave: product_id, asset_id, purpose, is_primary, sort_order, alt_text.
+- Restricciones:
+	- Un asset no se repite en el mismo producto (company_id + product_id + asset_id).
+	- Orden unico por producto (company_id + product_id + sort_order).
+	- Maximo una imagen primaria activa por producto (company_id + primary_product_id generado).
+
 ## Módulo: Inventario y Logística
 
 ### warehouses
@@ -125,3 +139,4 @@
 - [backend/database/migrations/20260425_001_multi_tenant_schema.sql](../../backend/database/migrations/20260425_001_multi_tenant_schema.sql)
 - [backend/database/migrations/20260425_002_business_logic.sql](../../backend/database/migrations/20260425_002_business_logic.sql)
 - [backend/database/migrations/20260425_003_performance_strategy.sql](../../backend/database/migrations/20260425_003_performance_strategy.sql)
+- [backend/database/migrations/20260425_005_product_images.sql](../../backend/database/migrations/20260425_005_product_images.sql)

@@ -1,0 +1,135 @@
+name: API Product Images Newman
+
+on:
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  api-product-images:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: MySQL#2024$
+          MYSQL_DATABASE: integra360
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pMySQL#2024$"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Ensure mysql client is available
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+          mysql --version
+
+      - name: Prepare database fixtures (persist mode)
+        shell: pwsh
+        working-directory: backend
+        run: |
+          ./scripts/run-db-e2e.ps1 `
+            -MySqlPath "mysql" `
+            -DbUser "root" `
+            -DbPassword "MySQL#2024$" `
+            -DbHost "127.0.0.1" `
+            -DbPort 3306 `
+            -Database "integra360" `
+            -PersistData
+
+      - name: Resolve company and product ids
+        id: fixture_ids
+        run: |
+          COMPANY_ID=$(mysql -h 127.0.0.1 -P 3306 -uroot -pMySQL#2024$ -N -D integra360 -e "SELECT id FROM companies WHERE code LIKE 'E2E_COMP_%' ORDER BY id DESC LIMIT 1")
+          PRODUCT_ID=$(mysql -h 127.0.0.1 -P 3306 -uroot -pMySQL#2024$ -N -D integra360 -e "SELECT p.id FROM products p WHERE p.company_id = ${COMPANY_ID} ORDER BY p.id DESC LIMIT 1")
+
+          if [ -z "$COMPANY_ID" ] || [ -z "$PRODUCT_ID" ]; then
+            echo "Failed to resolve fixture ids"
+            exit 1
+          fi
+
+          echo "company_id=$COMPANY_ID" >> "$GITHUB_OUTPUT"
+          echo "product_id=$PRODUCT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Start backend API
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          PORT: 3000
+          DATABASE_URL: mysql://root:MySQL#2024$@127.0.0.1:3306/integra360
+          JWT_ACCESS_SECRET: ci_access_secret_12345678901234567890
+          JWT_REFRESH_SECRET: ci_refresh_secret_1234567890123456789
+          JWT_ACCESS_EXPIRES_IN: 15m
+          JWT_REFRESH_EXPIRES_IN: 7d
+          CORS_ORIGIN: http://localhost:3000
+          SWAGGER_ENABLED: "false"
+          LOG_LEVEL: error
+          LOG_FORMAT: json
+        run: |
+          nohup node dist/main.js > /tmp/integra360-backend.log 2>&1 &
+
+      - name: Wait for API health
+        run: |
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:3000/api/v1/health > /dev/null; then
+              echo "API is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become ready in time"
+          exit 1
+
+      - name: Create image fixture for multipart upload
+        run: |
+          base64 -d > /tmp/product-image.jpg <<'EOF'
+          /9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEBUQEBAVFhUVFRUVFRUVFRUVFRUWFxUWFhUVFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMtNygtLisBCgoKDg0OGhAQGi0fHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAAEAAQMBIgACEQEDEQH/xAAXAAEBAQEAAAAAAAAAAAAAAAAAAQID/8QAFhEBAQEAAAAAAAAAAAAAAAAAABEB/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAVEQEBAAAAAAAAAAAAAAAAAAABAP/aAAwDAQACEQMRAD8A6wA//9k=
+          EOF
+          file /tmp/product-image.jpg
+
+      - name: Install Newman CLI
+        run: npm i -g newman
+
+      - name: Run Newman product image tests
+        env:
+          API_EMAIL: ci-user-${{ github.run_id }}@example.com
+          API_PASSWORD: Secret123!
+        run: |
+          newman run docs/api/newman/product-images.newman_collection.json \
+            -e docs/api/product-images.postman_environment.json \
+            --env-var baseUrl=http://127.0.0.1:3000 \
+            --env-var email=$API_EMAIL \
+            --env-var password=$API_PASSWORD \
+            --env-var companyId=${{ steps.fixture_ids.outputs.company_id }} \
+            --env-var productId=${{ steps.fixture_ids.outputs.product_id }} \
+            --env-var imagePath=/tmp/product-image.jpg
+
+      - name: Print backend log on failure
+        if: failure()
+        run: |
+          echo "--- backend log ---"
+          cat /tmp/integra360-backend.log || true

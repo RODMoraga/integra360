@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { StatusCodes } from "http-status-codes";
+import { MulterError } from "multer";
 import { AppError } from "../errors/AppError.js";
 import { logger } from "../logger/logger.js";
 
@@ -15,6 +16,13 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
 
   if (error instanceof AppError) {
     res.status(error.statusCode).json({
+      message: error.message
+    });
+    return;
+  }
+
+  if (error instanceof MulterError) {
+    res.status(StatusCodes.BAD_REQUEST).json({
       message: error.message
     });
     return;

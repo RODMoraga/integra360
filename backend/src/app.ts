@@ -1,4 +1,5 @@
 import express from "express";
+import path from "node:path";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -9,6 +10,7 @@ import { logger } from "./common/logger/logger.js";
 import { apiRateLimiter } from "./common/middleware/rateLimiter.js";
 import { errorHandler } from "./common/middleware/errorHandler.js";
 import { authRoutes } from "./modules/auth/routes/auth.routes.js";
+import { productImageRoutes } from "./modules/product-image/routes/productImage.routes.js";
 import { userRoutes } from "./modules/user/routes/user.routes.js";
 
 export const app = express();
@@ -19,6 +21,7 @@ app.use(helmet());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(apiRateLimiter);
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 setupSwagger(app);
 
 /**
@@ -40,6 +43,7 @@ app.get("/api/v1/health", (_req, res) => {
 });
 
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/products", productImageRoutes);
 app.use("/api/v1/users", userRoutes);
 
 app.use(errorHandler);
