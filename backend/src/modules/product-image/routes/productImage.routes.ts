@@ -4,7 +4,9 @@ import { mkdirSync } from "node:fs";
 import { StatusCodes } from "http-status-codes";
 import multer from "multer";
 import { AppError } from "../../../common/errors/AppError.js";
+import { asyncHandler } from "../../../common/middleware/asyncHandler.js";
 import { authGuard } from "../../../common/middleware/authGuard.js";
+import { requireRoles } from "../../../common/middleware/requireRole.js";
 import {
   getProductImages,
   markPrimaryProductImage,
@@ -76,7 +78,7 @@ export const productImageRoutes = Router();
  *       200:
  *         description: Product images
  */
-productImageRoutes.get("/:productId/images", authGuard, getProductImages);
+productImageRoutes.get("/:productId/images", authGuard, asyncHandler(getProductImages));
 
 /**
  * @openapi
@@ -122,7 +124,13 @@ productImageRoutes.get("/:productId/images", authGuard, getProductImages);
  *       201:
  *         description: Product image created
  */
-productImageRoutes.post("/:productId/images", authGuard, upload.single("image"), uploadProductImage);
+productImageRoutes.post(
+  "/:productId/images",
+  authGuard,
+  requireRoles("ADMIN"),
+  upload.single("image"),
+  asyncHandler(uploadProductImage)
+);
 
 /**
  * @openapi
@@ -137,7 +145,12 @@ productImageRoutes.post("/:productId/images", authGuard, upload.single("image"),
  *       204:
  *         description: Updated
  */
-productImageRoutes.patch("/:productId/images/:imageId", authGuard, patchProductImage);
+productImageRoutes.patch(
+  "/:productId/images/:imageId",
+  authGuard,
+  requireRoles("ADMIN"),
+  asyncHandler(patchProductImage)
+);
 
 /**
  * @openapi
@@ -152,7 +165,12 @@ productImageRoutes.patch("/:productId/images/:imageId", authGuard, patchProductI
  *       204:
  *         description: Primary updated
  */
-productImageRoutes.patch("/:productId/images/:imageId/primary", authGuard, markPrimaryProductImage);
+productImageRoutes.patch(
+  "/:productId/images/:imageId/primary",
+  authGuard,
+  requireRoles("ADMIN"),
+  asyncHandler(markPrimaryProductImage)
+);
 
 /**
  * @openapi
@@ -167,4 +185,9 @@ productImageRoutes.patch("/:productId/images/:imageId/primary", authGuard, markP
  *       204:
  *         description: Deleted
  */
-productImageRoutes.delete("/:productId/images/:imageId", authGuard, removeProductImage);
+productImageRoutes.delete(
+  "/:productId/images/:imageId",
+  authGuard,
+  requireRoles("ADMIN"),
+  asyncHandler(removeProductImage)
+);

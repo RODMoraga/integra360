@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncHandler } from "../../../common/middleware/asyncHandler.js";
 import { login, register } from "../controllers/auth.controller.js";
 
 export const authRoutes = Router();
@@ -32,7 +33,7 @@ export const authRoutes = Router();
  *       201:
  *         description: Tokens generated
  */
-authRoutes.post("/register", register);
+authRoutes.post("/register", asyncHandler(register));
 
 /**
  * @openapi
@@ -58,4 +59,4 @@ authRoutes.post("/register", register);
  *       200:
  *         description: Tokens generated
  */
-authRoutes.post("/login", login);
+authRoutes.post("/login", asyncHandler(login));

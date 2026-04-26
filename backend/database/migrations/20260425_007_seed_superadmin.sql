@@ -112,7 +112,7 @@ INSERT INTO users (
   @company_id,
   'Super Administrador Integra360',
   'superadmin@integra360.cl',
-  '$2a$12$umZ5ATJKR/bqhxQsidZRzu6H5cCvj97ZLe22QnBjgsfh98mGRUWOG',
+  '$2a$12$8xIZgm9bBYwJt0e/oB1psee6dLrZGUAMMT35KFK/2giuYPQmaPNle',
   1,
   NULL
 )

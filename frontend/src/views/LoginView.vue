@@ -10,8 +10,8 @@ const toast = useToast();
 const passwordVisible = ref(false);
 
 const form = reactive({
-  email: "admin@integra360.local",
-  password: "Admin123456!"
+  email: "",
+  password: ""
 });
 
 const touched = reactive({

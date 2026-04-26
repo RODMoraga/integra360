@@ -8,6 +8,8 @@ type TokenPayload = {
   sub: number;
   email: string;
   role: string;
+  companyId?: number;
+  authSource?: "legacy" | "tenant";
 };
 
 declare module "express-serve-static-core" {
@@ -39,7 +41,12 @@ export function authGuard(req: Request, _res: Response, next: NextFunction): voi
     const payload: TokenPayload = {
       sub: Number(decoded.sub),
       email: String(decoded.email),
-      role: String(decoded.role)
+      role: String(decoded.role),
+      companyId: "companyId" in decoded && decoded.companyId !== undefined ? Number(decoded.companyId) : undefined,
+      authSource:
+        "authSource" in decoded && (decoded.authSource === "legacy" || decoded.authSource === "tenant")
+          ? decoded.authSource
+          : undefined
     };
     req.auth = payload;
     next();

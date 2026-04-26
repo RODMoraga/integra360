@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncHandler } from "../../../common/middleware/asyncHandler.js";
 import { authGuard } from "../../../common/middleware/authGuard.js";
 import { me } from "../controllers/user.controller.js";
 
@@ -19,4 +20,4 @@ export const userRoutes = Router();
  *       401:
  *         description: Unauthorized
  */
-userRoutes.get("/me", authGuard, me);
+userRoutes.get("/me", authGuard, asyncHandler(me));
