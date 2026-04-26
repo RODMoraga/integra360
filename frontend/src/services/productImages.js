@@ -1,8 +1,16 @@
-import { api } from "./api";
+import { api, resolveAssetUrl } from "./api";
 
 export async function listProductImages(productId) {
   const response = await api.get(`/products/${productId}/images`);
-  return Array.isArray(response.data) ? response.data : [];
+  const items = Array.isArray(response.data) ? response.data : [];
+
+  // Resolve relative asset URLs so the browser fetches from the backend origin.
+  return items.map((item) => ({
+    ...item,
+    asset: item.asset
+      ? { ...item.asset, publicUrl: resolveAssetUrl(item.asset.publicUrl) }
+      : item.asset
+  }));
 }
 
 export async function uploadProductImage(productId, payload) {

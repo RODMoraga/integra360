@@ -2,6 +2,20 @@ import type { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { prisma } from "../../../database/prisma/client.js";
 
+/**
+ * GET /api/v1/users/me
+ *
+ * Returns the authenticated user's profile. The response shape differs
+ * depending on the token's `authSource`:
+ *
+ * - **`"tenant"`** — Looks up the user in `biz_users`, resolves the role
+ *   from the `user_roles` relation, and includes `companyId`.
+ * - **`"legacy"` / undefined** — Looks up the user in the legacy `users`
+ *   table and returns the stored `role` field directly.
+ *
+ * @param req - Express request with `req.auth` populated by `authGuard`.
+ * @param res - Express response.
+ */
 export async function me(req: Request, res: Response): Promise<void> {
   const userId = req.auth?.sub;
   const companyId = req.auth?.companyId;

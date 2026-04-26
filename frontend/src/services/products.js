@@ -1,6 +1,6 @@
-import { api } from "./api";
+import { api, DEFAULT_COMPANY_ID, resolveAssetUrl } from "./api";
 
-export async function getProductFilters({ companyId = 1 } = {}) {
+export async function getProductFilters({ companyId = DEFAULT_COMPANY_ID } = {}) {
   const response = await api.get("/products/filters", {
     params: { companyId }
   });
@@ -15,7 +15,7 @@ export async function getProductFilters({ companyId = 1 } = {}) {
 }
 
 export async function getProducts({
-  companyId = 1,
+  companyId = DEFAULT_COMPANY_ID,
   query = "",
   categoryId = "",
   brandId = "",
@@ -43,7 +43,12 @@ export async function getProducts({
 
   const response = await api.get("/products", { params });
 
-  const items = Array.isArray(response.data?.items) ? response.data.items : [];
+  const items = Array.isArray(response.data?.items)
+    ? response.data.items.map((item) => ({
+        ...item,
+        imageUrl: resolveAssetUrl(item.imageUrl)
+      }))
+    : [];
   const pagination = response.data?.pagination || null;
 
   return {

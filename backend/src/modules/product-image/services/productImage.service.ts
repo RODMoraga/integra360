@@ -52,10 +52,23 @@ type ProductImageListRow = {
   heightPx: number | null;
 };
 
+/**
+ * Converts a `bigint` or `number` to a plain `number`.
+ *
+ * @param value - The value to convert.
+ */
 function toNumber(value: bigint | number): number {
   return typeof value === "bigint" ? Number(value) : value;
 }
 
+/**
+ * Verifies that a product with the given ID exists for the company.
+ * Throws **404 Not Found** if the product is absent or soft-deleted.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param productId - Product identifier.
+ * @throws {AppError} 404 if the product does not exist.
+ */
 async function assertProductExists(companyId: number, productId: number): Promise<void> {
   const rows = await prisma.$queryRaw<Array<{ id: bigint | number }>>`
     SELECT id
@@ -71,6 +84,17 @@ async function assertProductExists(companyId: number, productId: number): Promis
   }
 }
 
+/**
+ * Ensures the requested `sortOrder` value is not already assigned to another
+ * image for the same product within the company.
+ *
+ * @param companyId      - Tenant company identifier.
+ * @param productId      - Product identifier.
+ * @param sortOrder      - The sort-order value to check.
+ * @param excludeImageId - Optional image ID to exclude from the conflict check
+ *                         (used when updating an existing image).
+ * @throws {AppError} 409 Conflict if `sortOrder` is already in use.
+ */
 async function assertSortOrderAvailable(
   companyId: number,
   productId: number,
@@ -92,6 +116,14 @@ async function assertSortOrderAvailable(
   }
 }
 
+/**
+ * Calculates the next available `sort_order` value for a product's images
+ * by incrementing the current maximum by 1.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param productId - Product identifier.
+ * @returns The next `sortOrder` integer to use.
+ */
 async function getNextSortOrder(companyId: number, productId: number): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ maxSortOrder: number | null }>>`
     SELECT COALESCE(MAX(sort_order), 0) AS maxSortOrder
@@ -103,6 +135,15 @@ async function getNextSortOrder(companyId: number, productId: number): Promise<n
   return Number(rows[0]?.maxSortOrder ?? 0) + 1;
 }
 
+/**
+ * Retrieves all active images for a product, ordered by primary flag,
+ * sort order, and creation date.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param productId - Product identifier.
+ * @returns Array of image objects including nested `asset` metadata.
+ * @throws {AppError} 404 if the product does not exist.
+ */
 export async function listProductImages(companyId: number, productId: number): Promise<unknown[]> {
   await assertProductExists(companyId, productId);
 
@@ -156,6 +197,17 @@ export async function listProductImages(companyId: number, productId: number): P
   }));
 }
 
+/**
+ * Persists a newly uploaded product image by creating a `digital_assets`
+ * record and a linked `product_images` row inside a transaction.
+ * When `isPrimary` is `true`, all existing images for the product are
+ * demoted before the new record is inserted.
+ *
+ * @param input - Upload metadata including file info and image properties.
+ * @returns The newly created image record with its asset details.
+ * @throws {AppError} 404 if the product does not exist.
+ * @throws {AppError} 409 if the requested `sortOrder` is already in use.
+ */
 export async function createProductImage(input: CreateImageInput): Promise<unknown> {
   await assertProductExists(input.companyId, input.productId);
 
@@ -252,6 +304,15 @@ export async function createProductImage(input: CreateImageInput): Promise<unkno
   return created;
 }
 
+/**
+ * Updates mutable metadata fields (`purpose`, `altText`, `sortOrder`,
+ * `isActive`) of an existing product image.
+ *
+ * @param input - Update payload; at least one field must differ from the
+ *                current value (enforced at the schema level).
+ * @throws {AppError} 404 if the product or image does not exist.
+ * @throws {AppError} 409 if the new `sortOrder` conflicts with another image.
+ */
 export async function updateProductImage(input: UpdateImageInput): Promise<void> {
   await assertProductExists(input.companyId, input.productId);
 
@@ -292,6 +353,16 @@ export async function updateProductImage(input: UpdateImageInput): Promise<void>
   `;
 }
 
+/**
+ * Promotes the specified image to primary for a product within a transaction:
+ * 1. Demotes all other images by setting `is_primary = 0`.
+ * 2. Sets `is_primary = 1` and `purpose = 'PRIMARY'` on the target image.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param productId - Product identifier.
+ * @param imageId   - ID of the image to promote.
+ * @throws {AppError} 404 if the product or (active) image does not exist.
+ */
 export async function setPrimaryProductImage(companyId: number, productId: number, imageId: number): Promise<void> {
   await assertProductExists(companyId, productId);
 
@@ -330,6 +401,20 @@ export async function setPrimaryProductImage(companyId: number, productId: numbe
   });
 }
 
+/**
+ * Deletes a product image and its `digital_assets` record (if no other
+ * images reference it) within a transaction.
+ *
+ * Returns metadata that tells the controller whether to delete the
+ * corresponding file from local disk storage.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param productId - Product identifier.
+ * @param imageId   - ID of the image to delete.
+ * @returns `{ deleteLocalFile, storageKey }` — `deleteLocalFile` is `true`
+ *   when the asset has no remaining references and is stored on local disk.
+ * @throws {AppError} 404 if the product or image does not exist.
+ */
 export async function deleteProductImage(
   companyId: number,
   productId: number,

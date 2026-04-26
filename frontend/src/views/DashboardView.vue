@@ -1,414 +1,507 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import MainLayout from "../layouts/MainLayout.vue";
 import AppChart from "../components/common/AppChart.vue";
+import AppDataTable from "../components/common/AppDataTable.vue";
 import { useAuthStore } from "../store/auth";
-import { useToast } from "../composables/useToast";
+import { DEFAULT_COMPANY_ID } from "../services/api";
 import { getProducts } from "../services/products";
-import {
-  deleteProductImage,
-  listProductImages,
-  markPrimaryProductImage,
-  updateProductImage,
-  uploadProductImage
-} from "../services/productImages";
 
 const authStore = useAuthStore();
-const toast = useToast();
-const labels = ref(["Jan", "Feb", "Mar", "Apr", "May", "Jun"]);
-const values = ref([3400, 4100, 3900, 5100, 6200, 7100]);
-const products = ref([]);
-const productsLoading = ref(false);
-const imagesLoading = ref(false);
-const uploadLoading = ref(false);
-const selectedProductId = ref("");
-const images = ref([]);
-const companyId = Number(import.meta.env.VITE_COMPANY_ID || 1);
 
-const uploadForm = ref({
-  purpose: "GALLERY",
-  altText: "",
-  sortOrder: "",
-  isPrimary: false,
-  file: null
+const loading = ref(false);
+const errorMessage = ref("");
+const products = ref([]);
+const filters = ref({ categories: [], brands: [] });
+
+const currencyFormatter = new Intl.NumberFormat("es-ES", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0
 });
 
-function imagePreviewUrl(image) {
-  const rawUrl = image?.asset?.publicUrl;
-  if (!rawUrl) {
-    return "";
-  }
+const compactNumberFormatter = new Intl.NumberFormat("es-ES", {
+  notation: "compact",
+  maximumFractionDigits: 1
+});
 
-  if (/^https?:\/\//i.test(rawUrl)) {
-    return rawUrl;
-  }
+const numberFormatter = new Intl.NumberFormat("es-ES");
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api/v1";
-  const origin = apiBase.replace(/\/api\/v1\/?$/, "");
-  return `${origin}${rawUrl}`;
-}
+const currentDateLabel = new Intl.DateTimeFormat("es-EC", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric"
+}).format(new Date());
 
-function resetUploadForm() {
-  uploadForm.value = {
-    purpose: "GALLERY",
-    altText: "",
-    sortOrder: "",
-    isPrimary: false,
-    file: null
-  };
-}
+const normalizedProducts = computed(() => {
+  return products.value.map((item) => ({
+    ...item,
+    price: Number(item.price || 0),
+    stock: Number(item.stock || 0)
+  }));
+});
 
-async function loadProductsForManager() {
-  productsLoading.value = true;
+const totalInventoryValue = computed(() => {
+  return normalizedProducts.value.reduce((accumulator, item) => accumulator + item.price * item.stock, 0);
+});
 
-  try {
-    const response = await getProducts({
-      companyId,
-      limit: 36,
-      page: 1,
-      sortBy: "name",
-      sortOrder: "asc"
-    });
+const inStockCount = computed(() => {
+  return normalizedProducts.value.filter((item) => item.stock > 0).length;
+});
 
-    products.value = response.items || [];
+const availabilityPercent = computed(() => {
+  const total = normalizedProducts.value.length;
+  if (!total) return 0;
+  return Math.round((inStockCount.value / total) * 1000) / 10;
+});
 
-    if (!selectedProductId.value && products.value.length > 0) {
-      selectedProductId.value = String(products.value[0].id);
+const averageTicket = computed(() => {
+  const total = normalizedProducts.value.length;
+  if (!total) return 0;
+  const sum = normalizedProducts.value.reduce((accumulator, item) => accumulator + item.price, 0);
+  return sum / total;
+});
+
+const summaryCards = computed(() => {
+  return [
+    {
+      title: "Inventario valorizado",
+      value: currencyFormatter.format(totalInventoryValue.value),
+      change: `${numberFormatter.format(normalizedProducts.value.length)} productos activos`,
+      icon: "fa-solid fa-sack-dollar",
+      accent: "from-primary to-primary-700"
+    },
+    {
+      title: "Productos en stock",
+      value: numberFormatter.format(inStockCount.value),
+      change: `${numberFormatter.format(normalizedProducts.value.length - inStockCount.value)} sin stock`,
+      icon: "fa-solid fa-cart-flatbed",
+      accent: "from-secondary to-secondary-700"
+    },
+    {
+      title: "Disponibilidad",
+      value: `${availabilityPercent.value.toFixed(1)}%`,
+      change: "Cobertura actual del catalogo",
+      icon: "fa-solid fa-box-open",
+      accent: "from-warning to-orange-600"
+    },
+    {
+      title: "Ticket promedio",
+      value: currencyFormatter.format(averageTicket.value),
+      change: `${numberFormatter.format(filters.value.categories.length)} categorias con datos`,
+      icon: "fa-solid fa-face-smile-beam",
+      accent: "from-ink-black-600 to-ink-black-900"
     }
-  } catch (error) {
-    const message = error?.response?.data?.message || "No fue posible cargar el listado de productos.";
-    toast.error(String(message));
-  } finally {
-    productsLoading.value = false;
-  }
-}
+  ];
+});
 
-async function loadImages() {
-  if (!selectedProductId.value) {
-    images.value = [];
-    return;
-  }
+const revenueTopProducts = computed(() => {
+  return [...normalizedProducts.value]
+    .map((item) => ({
+      ...item,
+      inventoryValue: item.price * item.stock
+    }))
+    .sort((left, right) => right.inventoryValue - left.inventoryValue)
+    .slice(0, 7);
+});
 
-  imagesLoading.value = true;
+const revenueLabels = computed(() => {
+  return revenueTopProducts.value.map((item) => item.name || item.sku || "Producto");
+});
+
+const revenueDatasets = computed(() => {
+  const inventoryValues = revenueTopProducts.value.map((item) => Number(item.inventoryValue.toFixed(2)));
+  const average = inventoryValues.length
+    ? inventoryValues.reduce((accumulator, value) => accumulator + value, 0) / inventoryValues.length
+    : 0;
+
+  return [
+    {
+      label: "Valor inventario",
+      data: inventoryValues,
+      borderColor: "#1736e8",
+      backgroundColor: "rgba(23, 54, 232, 0.14)",
+      fill: true,
+      tension: 0.35,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      pointBackgroundColor: "#ffffff",
+      pointBorderWidth: 2
+    },
+    {
+      label: "Promedio",
+      data: inventoryValues.map(() => Number(average.toFixed(2))),
+      borderColor: "#e61961",
+      borderDash: [6, 6],
+      backgroundColor: "rgba(230, 25, 97, 0)",
+      fill: false,
+      tension: 0.2,
+      pointRadius: 0
+    }
+  ];
+});
+
+const categoryDistribution = computed(() => {
+  const counters = new Map();
+
+  normalizedProducts.value.forEach((item) => {
+    const key = item.categoryName || "Sin categoria";
+    counters.set(key, (counters.get(key) || 0) + 1);
+  });
+
+  return [...counters.entries()]
+    .map(([name, total]) => ({ name, total }))
+    .sort((left, right) => right.total - left.total)
+    .slice(0, 4);
+});
+
+const channelLabels = computed(() => {
+  return categoryDistribution.value.map((item) => item.name);
+});
+
+const channelDatasets = computed(() => {
+  return [
+    {
+      label: "Productos",
+      data: categoryDistribution.value.map((item) => item.total),
+      backgroundColor: ["#1736e8", "#455eed", "#e61961", "#f99006"],
+      borderRadius: 14,
+      borderSkipped: false
+    }
+  ];
+});
+
+const topProductsRows = computed(() => {
+  return [...normalizedProducts.value]
+    .map((item) => ({
+      sku: item.sku,
+      product: item.name,
+      category: item.categoryName || "Sin categoria",
+      price: item.price,
+      stock: item.stock,
+      inventoryValue: item.price * item.stock
+    }))
+    .sort((left, right) => right.inventoryValue - left.inventoryValue)
+    .slice(0, 12);
+});
+
+const categoryQueueRows = computed(() => {
+  const grouped = new Map();
+
+  normalizedProducts.value.forEach((item) => {
+    const key = item.categoryName || "Sin categoria";
+    const current = grouped.get(key) || { category: key, products: 0, totalStock: 0, lowStock: 0 };
+
+    current.products += 1;
+    current.totalStock += item.stock;
+    if (item.stock <= 10) {
+      current.lowStock += 1;
+    }
+
+    grouped.set(key, current);
+  });
+
+  return [...grouped.values()]
+    .map((item) => ({
+      ...item,
+      averageStock: item.products ? item.totalStock / item.products : 0,
+      sla: item.lowStock > 4 ? "Critico" : item.lowStock > 1 ? "Atencion" : "Estable"
+    }))
+    .sort((left, right) => right.products - left.products)
+    .slice(0, 10);
+});
+
+const brandTrendRows = computed(() => {
+  const grouped = new Map();
+
+  normalizedProducts.value.forEach((item) => {
+    const key = item.brandName || "Sin marca";
+    const current = grouped.get(key) || { brand: key, products: 0, totalStock: 0, totalPrice: 0 };
+
+    current.products += 1;
+    current.totalStock += item.stock;
+    current.totalPrice += item.price;
+
+    grouped.set(key, current);
+  });
+
+  return [...grouped.values()]
+    .map((item) => {
+      const avgStock = item.products ? item.totalStock / item.products : 0;
+      const avgPrice = item.products ? item.totalPrice / item.products : 0;
+      const trend = avgStock >= 25 ? "up" : avgStock <= 10 ? "down" : "flat";
+      const variation = avgStock >= 25 ? `+${Math.round(avgStock)}%` : avgStock <= 10 ? `-${Math.round(12 - avgStock)}%` : `${Math.round(avgStock)}%`;
+      const forecast = trend === "up" ? "Favorable" : trend === "down" ? "Revisar" : "Estable";
+
+      return {
+        indicator: item.brand,
+        variation,
+        trend,
+        forecast,
+        reference: currencyFormatter.format(avgPrice)
+      };
+    })
+    .sort((left, right) => left.indicator.localeCompare(right.indicator))
+    .slice(0, 12);
+});
+
+const topProductsColumns = [
+  { title: "SKU", data: "sku" },
+  { title: "Producto", data: "product" },
+  { title: "Categoria", data: "category" },
+  {
+    title: "Precio",
+    data: "price",
+    render: (value) => currencyFormatter.format(value)
+  },
+  {
+    title: "Stock",
+    data: "stock",
+    render: (value) => `<span class="font-semibold text-primary">${numberFormatter.format(value)}</span>`
+  },
+  {
+    title: "Valor inventario",
+    data: "inventoryValue",
+    render: (value) => currencyFormatter.format(value)
+  }
+];
+
+const categoryQueueColumns = [
+  { title: "Categoria", data: "category" },
+  {
+    title: "Productos",
+    data: "products",
+    render: (value) => numberFormatter.format(value)
+  },
+  {
+    title: "Stock promedio",
+    data: "averageStock",
+    render: (value) => numberFormatter.format(Math.round(value))
+  },
+  {
+    title: "Bajo stock",
+    data: "lowStock",
+    render: (value) => `<span class="table-pill ${value > 2 ? "pill-warning" : "pill-positive"}">${numberFormatter.format(value)}</span>`
+  },
+  {
+    title: "Estado",
+    data: "sla",
+    render: (value) => {
+      const variant = value === "Critico" ? "pill-danger" : value === "Atencion" ? "pill-warning" : "pill-positive";
+      return `<span class="table-pill ${variant}">${value}</span>`;
+    }
+  }
+];
+
+const trendColumns = [
+  { title: "Indicador", data: "indicator" },
+  {
+    title: "Variacion",
+    data: "variation",
+    render: (value, _type, row) => {
+      const icon =
+        row.trend === "up"
+          ? "fa-arrow-trend-up text-emerald-600"
+          : row.trend === "down"
+            ? "fa-arrow-trend-down text-danger"
+            : "fa-arrows-left-right-to-line text-warning";
+
+      return `<span class="trend-badge"><i class="fa-solid ${icon}"></i>${value}</span>`;
+    }
+  },
+  {
+    title: "Pronostico",
+    data: "forecast",
+    render: (value) => {
+      const variant = value === "Revisar" ? "pill-danger" : value === "Estable" ? "pill-warning" : "pill-positive";
+      return `<span class="table-pill ${variant}">${value}</span>`;
+    }
+  },
+  { title: "Referencia precio", data: "reference" }
+];
+
+const greetingName = computed(() => authStore.profile?.fullName || "equipo Integra360");
+const revenueHeadline = computed(() => compactNumberFormatter.format(totalInventoryValue.value || 0));
+
+async function loadDashboardData() {
+  loading.value = true;
+  errorMessage.value = "";
 
   try {
-    images.value = await listProductImages(selectedProductId.value);
-  } catch (error) {
-    const message = error?.response?.data?.message || "No fue posible cargar las imagenes del producto.";
-    toast.error(String(message));
-    images.value = [];
-  } finally {
-    imagesLoading.value = false;
-  }
-}
-
-function onFileChange(event) {
-  const [file] = event.target.files || [];
-  uploadForm.value.file = file || null;
-}
-
-async function submitImageUpload() {
-  if (!selectedProductId.value) {
-    toast.error("Selecciona un producto para subir imagenes.");
-    return;
-  }
-
-  if (!uploadForm.value.file) {
-    toast.error("Selecciona un archivo de imagen.");
-    return;
-  }
-
-  uploadLoading.value = true;
-
-  try {
-    await uploadProductImage(selectedProductId.value, {
-      file: uploadForm.value.file,
-      purpose: uploadForm.value.purpose,
-      altText: uploadForm.value.altText,
-      sortOrder: uploadForm.value.sortOrder ? Number(uploadForm.value.sortOrder) : undefined,
-      isPrimary: uploadForm.value.isPrimary
+    const productsResponse = await getProducts({
+      companyId: DEFAULT_COMPANY_ID,
+      limit: 60,
+      page: 1,
+      sortBy: "stock",
+      sortOrder: "desc"
     });
 
-    toast.success("Imagen subida correctamente.");
-    resetUploadForm();
-    await loadImages();
+    const items = Array.isArray(productsResponse.items) ? productsResponse.items : [];
+    const categoryNames = [...new Set(items.map((item) => item.categoryName).filter(Boolean))];
+    const brandNames = [...new Set(items.map((item) => item.brandName).filter(Boolean))];
+
+    products.value = items;
+    filters.value = {
+      categories: categoryNames,
+      brands: brandNames
+    };
   } catch (error) {
-    const message = error?.response?.data?.message || "No fue posible subir la imagen.";
-    toast.error(String(message));
+    products.value = [];
+    filters.value = { categories: [], brands: [] };
+    errorMessage.value = error?.response?.data?.message || "No fue posible cargar los indicadores reales del dashboard.";
   } finally {
-    uploadLoading.value = false;
-  }
-}
-
-async function makePrimary(imageId) {
-  if (!selectedProductId.value) return;
-
-  try {
-    await markPrimaryProductImage(selectedProductId.value, imageId);
-    toast.success("Imagen principal actualizada.");
-    await loadImages();
-  } catch (error) {
-    const message = error?.response?.data?.message || "No fue posible establecer imagen principal.";
-    toast.error(String(message));
-  }
-}
-
-async function saveImageMetadata(image) {
-  if (!selectedProductId.value) return;
-
-  try {
-    await updateProductImage(selectedProductId.value, image.id, {
-      altText: image.altText || null,
-      sortOrder: Number(image.sortOrder || 1)
-    });
-    toast.success("Metadatos actualizados.");
-    await loadImages();
-  } catch (error) {
-    const message = error?.response?.data?.message || "No fue posible actualizar la imagen.";
-    toast.error(String(message));
-  }
-}
-
-async function removeImage(imageId) {
-  if (!selectedProductId.value) return;
-
-  try {
-    await deleteProductImage(selectedProductId.value, imageId);
-    toast.success("Imagen eliminada.");
-    await loadImages();
-  } catch (error) {
-    const message = error?.response?.data?.message || "No fue posible eliminar la imagen.";
-    toast.error(String(message));
+    loading.value = false;
   }
 }
 
 onMounted(async () => {
-  if (!authStore.profile) {
+  if (!authStore.profile && authStore.accessToken) {
     await authStore.fetchProfile();
   }
 
-  await loadProductsForManager();
-  await loadImages();
+  await loadDashboardData();
 });
 </script>
 
 <template>
   <MainLayout>
-    <section class="grid gap-spacing-md md:grid-cols-3">
-      <article class="glass-card rounded-card p-card shadow-card">
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-on-surface-muted">User</h3>
-        <p class="mt-2 text-xl font-bold text-on-surface">{{ authStore.profile?.fullName || "-" }}</p>
-      </article>
-
-      <article class="glass-card rounded-card p-card shadow-card">
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-on-surface-muted">Role</h3>
-        <p class="mt-2 text-xl font-bold text-on-surface">{{ authStore.profile?.role || "-" }}</p>
-      </article>
-
-      <article class="glass-card rounded-card p-card shadow-card">
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-on-surface-muted">Status</h3>
-        <p class="mt-2 text-xl font-bold text-secondary">Online</p>
-      </article>
-    </section>
-
-    <section class="glass-card spacing-section rounded-panel p-card shadow-panel">
-      <h2 class="mb-4 font-display text-xl">Revenue Trend</h2>
-      <AppChart :labels="labels" :values="values" />
-    </section>
-
-    <section class="glass-card spacing-section rounded-panel p-card shadow-panel">
-      <div class="manager-header">
+    <section class="dashboard-hero glass-card rounded-panel p-card shadow-panel">
+      <div class="grid gap-6 xl:grid-cols-[1.4fr_0.9fr] xl:items-center">
         <div>
-          <h2 class="font-display text-xl">Gestor de Imagenes de Productos</h2>
-          <p class="manager-subtitle">Sube imagenes, define portada y administra metadatos por producto.</p>
-        </div>
-      </div>
+          <p class="text-xs font-semibold uppercase tracking-[0.28em] text-primary">Vision operativa 360</p>
+          <h1 class="mt-3 max-w-3xl font-display text-3xl font-bold text-on-surface sm:text-4xl">
+            Bienvenido, {{ greetingName }}. Este es el pulso comercial y operativo de hoy.
+          </h1>
+          <p class="mt-4 max-w-2xl text-base leading-7 text-on-surface-muted">
+            Indicadores conectados a datos reales del backend de catalogo. Monitorea inventario, disponibilidad y composicion de productos en una sola vista.
+          </p>
 
-      <div class="manager-controls">
-        <label class="manager-label" for="product-selector">Producto</label>
-        <select
-          id="product-selector"
-          v-model="selectedProductId"
-          class="form-select"
-          :disabled="productsLoading"
-          @change="loadImages"
-        >
-          <option value="">Selecciona un producto</option>
-          <option v-for="product in products" :key="product.id" :value="String(product.id)">
-            {{ product.sku }} - {{ product.name }}
-          </option>
-        </select>
-      </div>
-
-      <form class="upload-panel" @submit.prevent="submitImageUpload">
-        <div>
-          <label class="manager-label" for="upload-purpose">Tipo</label>
-          <select id="upload-purpose" v-model="uploadForm.purpose" class="form-select">
-            <option value="GALLERY">Galeria</option>
-            <option value="PRIMARY">Principal</option>
-            <option value="THUMBNAIL">Miniatura</option>
-            <option value="DETAIL">Detalle</option>
-            <option value="PACKAGING">Empaque</option>
-          </select>
+          <div class="mt-6 flex flex-wrap gap-3">
+            <span class="info-chip"><i class="fa-regular fa-calendar"></i>{{ currentDateLabel }}</span>
+            <span class="info-chip"><i class="fa-solid fa-database"></i>Fuente: API productos</span>
+            <span class="info-chip"><i class="fa-solid fa-user-shield"></i>Rol: {{ authStore.profile?.role || 'Interno' }}</span>
+          </div>
         </div>
 
-        <div>
-          <label class="manager-label" for="upload-alt-text">Alt Text</label>
-          <input id="upload-alt-text" v-model="uploadForm.altText" type="text" class="form-control" />
-        </div>
-
-        <div>
-          <label class="manager-label" for="upload-sort-order">Orden</label>
-          <input id="upload-sort-order" v-model="uploadForm.sortOrder" type="number" min="1" class="form-control" />
-        </div>
-
-        <div>
-          <label class="manager-label" for="upload-file">Archivo</label>
-          <input id="upload-file" type="file" accept="image/*" class="form-control" @change="onFileChange" />
-        </div>
-
-        <label class="checkbox-line">
-          <input v-model="uploadForm.isPrimary" type="checkbox" />
-          <span>Marcar como principal al subir</span>
-        </label>
-
-        <button class="btn btn-primary" type="submit" :disabled="uploadLoading || !selectedProductId">
-          {{ uploadLoading ? "Subiendo..." : "Subir imagen" }}
-        </button>
-      </form>
-
-      <p v-if="imagesLoading" class="manager-state">Cargando imagenes...</p>
-      <p v-else-if="!selectedProductId" class="manager-state">Selecciona un producto para ver su galeria.</p>
-      <p v-else-if="!images.length" class="manager-state">Este producto aun no tiene imagenes.</p>
-
-      <div v-else class="image-grid">
-        <article v-for="image in images" :key="image.id" class="image-card">
-          <img :src="imagePreviewUrl(image)" :alt="image.altText || 'Imagen de producto'" class="image-preview" />
-
-          <div class="image-content">
-            <p class="image-meta">{{ image.purpose }} | Orden {{ image.sortOrder }}</p>
-            <p class="image-meta" :class="image.isPrimary ? 'image-primary' : ''">
-              {{ image.isPrimary ? "Principal" : "Secundaria" }}
-            </p>
-
-            <label class="manager-label" :for="`alt-${image.id}`">Alt Text</label>
-            <input :id="`alt-${image.id}`" v-model="image.altText" type="text" class="form-control" />
-
-            <label class="manager-label" :for="`sort-${image.id}`">Orden</label>
-            <input :id="`sort-${image.id}`" v-model="image.sortOrder" type="number" min="1" class="form-control" />
-
-            <div class="image-actions">
-              <button class="btn btn-outline-primary btn-sm" type="button" @click="saveImageMetadata(image)">
-                Guardar
-              </button>
-              <button
-                class="btn btn-outline-primary btn-sm"
-                type="button"
-                :disabled="image.isPrimary"
-                @click="makePrimary(image.id)"
-              >
-                Principal
-              </button>
-              <button class="btn btn-danger btn-sm" type="button" @click="removeImage(image.id)">Eliminar</button>
+        <div class="hero-highlight-panel">
+          <p class="text-xs font-semibold uppercase tracking-[0.26em] text-white/65">Inventario valorizado</p>
+          <div class="mt-4 flex items-end gap-4">
+            <span class="text-5xl font-bold text-white">{{ revenueHeadline }}</span>
+            <span class="rounded-pill bg-white/12 px-3 py-2 text-sm font-semibold text-white">real-time</span>
+          </div>
+          <p class="mt-3 text-sm leading-6 text-white/72">
+            Valores calculados con precio y stock por producto activo en la compania actual.
+          </p>
+          <div class="mt-6 grid gap-3 sm:grid-cols-2">
+            <div class="hero-mini-stat">
+              <span class="hero-mini-stat__label">Categorias activas</span>
+              <strong>{{ numberFormatter.format(filters.categories.length) }}</strong>
+            </div>
+            <div class="hero-mini-stat">
+              <span class="hero-mini-stat__label">Marcas activas</span>
+              <strong>{{ numberFormatter.format(filters.brands.length) }}</strong>
             </div>
           </div>
-        </article>
+        </div>
       </div>
     </section>
+
+    <section v-if="errorMessage" class="mt-section rounded-panel border border-danger/20 bg-danger/10 p-card text-danger">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span class="font-semibold">{{ errorMessage }}</span>
+      </div>
+    </section>
+
+    <section class="mt-section grid gap-spacing-md sm:grid-cols-2 2xl:grid-cols-4">
+      <article
+        v-for="card in summaryCards"
+        :key="card.title"
+        class="metric-card rounded-panel border border-surface-border/80 bg-white/95 p-card shadow-card"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-wide text-on-surface-muted">{{ card.title }}</p>
+            <p class="mt-4 text-3xl font-bold text-on-surface">{{ card.value }}</p>
+          </div>
+          <div class="metric-icon bg-gradient-to-br" :class="card.accent">
+            <i :class="card.icon"></i>
+          </div>
+        </div>
+        <p class="mt-4 text-sm text-on-surface-muted">{{ card.change }}</p>
+      </article>
+    </section>
+
+    <section class="mt-section grid gap-spacing-md xl:grid-cols-2">
+      <article class="glass-card rounded-panel p-card shadow-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">KPI financiero</p>
+            <h2 class="font-display text-2xl font-bold text-on-surface">Top productos por valor de inventario</h2>
+          </div>
+          <span class="section-badge">Datos reales</span>
+        </div>
+        <AppChart :labels="revenueLabels" :datasets="revenueDatasets" />
+      </article>
+
+      <article class="glass-card rounded-panel p-card shadow-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Distribucion</p>
+            <h2 class="font-display text-2xl font-bold text-on-surface">Categorias con mayor participacion</h2>
+          </div>
+          <span class="section-badge section-badge--secondary">Catalogo</span>
+        </div>
+        <AppChart
+          type="bar"
+          :labels="channelLabels"
+          :datasets="channelDatasets"
+          :options="{ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }"
+        />
+      </article>
+    </section>
+
+    <section class="mt-section grid gap-spacing-md 2xl:grid-cols-2">
+      <article class="glass-card rounded-panel p-card shadow-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">DataTable</p>
+            <h2 class="font-display text-2xl font-bold text-on-surface">Productos lideres por valor inventario</h2>
+          </div>
+          <span class="section-badge">Top dinamico</span>
+        </div>
+        <AppDataTable :columns="topProductsColumns" :rows="topProductsRows" :options="{ paging: true, searching: true }" />
+      </article>
+
+      <article class="glass-card rounded-panel p-card shadow-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">DataTable</p>
+            <h2 class="font-display text-2xl font-bold text-on-surface">Cobertura operativa por categoria</h2>
+          </div>
+          <span class="section-badge section-badge--warning">SLA de stock</span>
+        </div>
+        <AppDataTable :columns="categoryQueueColumns" :rows="categoryQueueRows" :options="{ paging: true, searching: true }" />
+      </article>
+    </section>
+
+    <section class="mt-section glass-card rounded-panel p-card shadow-panel">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">Tendencias</p>
+          <h2 class="font-display text-2xl font-bold text-on-surface">Indicadores por marca con proyeccion</h2>
+        </div>
+        <span class="section-badge section-badge--dark">Decision support</span>
+      </div>
+      <AppDataTable
+        :columns="trendColumns"
+        :rows="brandTrendRows"
+        :options="{ paging: true, searching: true, pageLength: 6 }"
+        :page-length="6"
+      />
+    </section>
+
+    <p v-if="loading" class="mt-4 text-sm font-semibold text-on-surface-muted">Actualizando dashboard...</p>
   </MainLayout>
 </template>
-
-<style scoped>
-.manager-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.manager-subtitle {
-  margin: 0.25rem 0 0;
-  color: var(--color-on-surface-muted);
-}
-
-.manager-controls {
-  margin-top: 1rem;
-}
-
-.manager-label {
-  display: block;
-  margin-bottom: 0.3rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.upload-panel {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
-  align-items: end;
-}
-
-.checkbox-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.manager-state {
-  margin-top: 1rem;
-  color: var(--color-on-surface-muted);
-}
-
-.image-grid {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 0.9rem;
-}
-
-.image-card {
-  border: 1px solid var(--color-surface-border);
-  border-radius: 0.9rem;
-  background: var(--color-surface-elevated);
-  overflow: hidden;
-}
-
-.image-preview {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-bottom: 1px solid var(--color-surface-border);
-}
-
-.image-content {
-  padding: 0.8rem;
-}
-
-.image-meta {
-  margin: 0 0 0.4rem;
-  font-size: 0.85rem;
-  color: var(--color-on-surface-muted);
-}
-
-.image-primary {
-  color: var(--color-primary);
-  font-weight: 700;
-}
-
-.image-actions {
-  margin-top: 0.8rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-@media (max-width: 768px) {
-  .upload-panel {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

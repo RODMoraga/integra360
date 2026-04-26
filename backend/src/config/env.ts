@@ -402,6 +402,16 @@ const normalizedEnv = {
   SWAGGER_ENABLED: swaggerEnabled,
 };
 
+/**
+ * Validated and type-safe application environment configuration.
+ *
+ * All values are parsed from `process.env` at startup using a Zod schema.
+ * If any required variable is missing or invalid the process exits with a
+ * non-zero code and a descriptive error message.
+ *
+ * Import this object instead of reading `process.env` directly anywhere in
+ * the codebase to guarantee type safety and consistent defaults.
+ */
 export const env = normalizedEnv;
 
 // Log loaded environment in development

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import AppAdvancedSelect from "../components/common/AppAdvancedSelect.vue";
+import { DEFAULT_COMPANY_ID } from "../services/api";
 import { getProductFilters, getProducts } from "../services/products";
 
 const mobileOpen = ref(false);
@@ -16,7 +17,7 @@ const route = useRoute();
 const router = useRouter();
 const isHydratingFromRoute = ref(false);
 
-const companyId = Number(import.meta.env.VITE_COMPANY_ID || 1);
+const companyId = DEFAULT_COMPANY_ID;
 const defaultProductImage =
   "https://images.unsplash.com/photo-1486401899868-0e435ed85128?auto=format&fit=crop&w=700&q=80";
 

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncHandler } from "../../../common/middleware/asyncHandler.js";
 import { getProductFilters, getProducts } from "../controllers/product.controller.js";
 
 export const productRoutes = Router();
@@ -49,7 +50,7 @@ export const productRoutes = Router();
  *       200:
  *         description: Product list
  */
-productRoutes.get("/", getProducts);
+productRoutes.get("/", asyncHandler(getProducts));
 
 /**
  * @openapi
@@ -67,4 +68,4 @@ productRoutes.get("/", getProducts);
  *       200:
  *         description: Available filter values
  */
-productRoutes.get("/filters", getProductFilters);
+productRoutes.get("/filters", asyncHandler(getProductFilters));

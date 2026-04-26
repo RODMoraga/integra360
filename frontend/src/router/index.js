@@ -1,25 +1,28 @@
 import { createRouter, createWebHistory } from "vue-router";
-import HomeView from "../views/HomeView.vue";
-import DashboardView from "../views/DashboardView.vue";
-import LoginView from "../views/LoginView.vue";
 import { useAuthStore } from "../store/auth";
+
+const HomeView = () => import("../views/HomeView.vue");
+const DashboardView = () => import("../views/DashboardView.vue");
+const LoginView = () => import("../views/LoginView.vue");
 
 const routes = [
   {
     path: "/",
     name: "home",
-    component: HomeView
+    component: HomeView,
+    meta: { title: "Inicio" }
   },
   {
     path: "/login",
     name: "login",
-    component: LoginView
+    component: LoginView,
+    meta: { title: "Acceso" }
   },
   {
     path: "/dashboard",
     name: "dashboard",
     component: DashboardView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, title: "Dashboard Ejecutivo", section: "Control Operativo" }
   }
 ];
 

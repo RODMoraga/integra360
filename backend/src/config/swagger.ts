@@ -2,6 +2,13 @@ import type { Express, NextFunction, Request, Response } from "express";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./env.js";
 
+/**
+ * Builds the full OpenAPI 3.0.3 specification object for the Integra360 API.
+ * The server URL is derived from `API_PUBLIC_BASE_URL` when available;
+ * otherwise it falls back to `http://localhost:{PORT}`.
+ *
+ * @returns A plain object conforming to the OpenAPI 3.0.3 schema.
+ */
 function createSwaggerSpec(): object {
   return {
     openapi: "3.0.3",
@@ -160,8 +167,14 @@ function createSwaggerSpec(): object {
   };
 }
 
+/** Cached Swagger spec to avoid rebuilding the object on every request. */
 let cachedSwaggerSpec: object | null = null;
 
+/**
+ * Returns the Swagger spec, building and caching it on first call.
+ *
+ * @returns The singleton OpenAPI specification object.
+ */
 function getSwaggerSpec(): object {
   if (!cachedSwaggerSpec) {
     cachedSwaggerSpec = createSwaggerSpec();
@@ -170,6 +183,18 @@ function getSwaggerSpec(): object {
   return cachedSwaggerSpec;
 }
 
+/**
+ * Express middleware that enforces HTTP Basic Authentication on the
+ * Swagger documentation routes when credentials are configured via
+ * `SWAGGER_USERNAME` / `SWAGGER_PASSWORD` environment variables.
+ *
+ * If neither variable is set the middleware is transparent (calls `next()`
+ * immediately), which is the expected behaviour in development.
+ *
+ * @param req  - Express request.
+ * @param res  - Express response.
+ * @param next - Next middleware.
+ */
 function basicAuth(req: Request, res: Response, next: NextFunction): void {
   const username = env.SWAGGER_USERNAME;
   const password = env.SWAGGER_PASSWORD;
@@ -209,6 +234,18 @@ function basicAuth(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
+/**
+ * Registers Swagger UI and the raw spec endpoint on the given Express app.
+ *
+ * Routes registered:
+ * - `GET /api-docs`      — Swagger UI (served via swagger-ui-express).
+ * - `GET /api-docs.json` — Raw OpenAPI JSON spec.
+ *
+ * Both routes are protected by `basicAuth` in production when credentials
+ * are configured. This function is a no-op when `SWAGGER_ENABLED` is `false`.
+ *
+ * @param app - The Express application instance.
+ */
 export function setupSwagger(app: Express): void {
   if (!env.SWAGGER_ENABLED) {
     return;

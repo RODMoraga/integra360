@@ -21,11 +21,27 @@ type FilterRow = {
   name: string;
 };
 
+/**
+ * Converts a `bigint` or `number` value to a plain `number`.
+ * Returns `null` when the input is `null`.
+ *
+ * @param value - The value to convert.
+ */
 function toNumber(value: bigint | number | null): number | null {
   if (value === null) return null;
   return typeof value === "bigint" ? Number(value) : value;
 }
 
+/**
+ * Builds the parameterised SQL `WHERE` clause for the product list query.
+ * Always filters by `company_id`, `is_active`, and `deleted_at`.
+ * Optionally adds full-text search on `sku`, `name`, and `description`,
+ * as well as category/brand ID filters.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param query     - Validated query parameters from the HTTP request.
+ * @returns A Prisma SQL fragment starting with `WHERE`.
+ */
 function buildProductWhere(companyId: number, query: ListProductsQuery): Prisma.Sql {
   const clauses: Prisma.Sql[] = [
     Prisma.sql`p.company_id = ${companyId}`,
@@ -56,6 +72,12 @@ function buildProductWhere(companyId: number, query: ListProductsQuery): Prisma.
   return Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`;
 }
 
+/**
+ * Returns the SQL column expression to sort products by.
+ *
+ * @param sortBy - The sort field selected by the client.
+ * @returns A Prisma SQL fragment representing the ORDER BY column.
+ */
 function getSortFragment(sortBy: ListProductsQuery["sortBy"]): Prisma.Sql {
   if (sortBy === "price") {
     return Prisma.sql`price`;
@@ -68,10 +90,27 @@ function getSortFragment(sortBy: ListProductsQuery["sortBy"]): Prisma.Sql {
   return Prisma.sql`p.name`;
 }
 
+/**
+ * Returns a SQL direction fragment (`ASC` or `DESC`) for the ORDER BY clause.
+ *
+ * @param sortOrder - The sort direction selected by the client.
+ * @returns A Prisma SQL fragment (`ASC` or `DESC`).
+ */
 function getSortDirectionFragment(sortOrder: ListProductsQuery["sortOrder"]): Prisma.Sql {
   return sortOrder === "desc" ? Prisma.sql`DESC` : Prisma.sql`ASC`;
 }
 
+/**
+ * Returns a paginated, filtered, and sorted list of products for a company.
+ *
+ * The query joins `categories`, `brands`, product variant pricing
+ * (`product_variants`), inventory aggregates, and the primary product image
+ * from `product_images` / `digital_assets`.
+ *
+ * @param companyId - Tenant company identifier.
+ * @param query     - Validated list query (search term, filters, pagination, sort).
+ * @returns An object containing `items`, `pagination`, and `sort` metadata.
+ */
 export async function listProducts(companyId: number, query: ListProductsQuery): Promise<unknown> {
   const whereClause = buildProductWhere(companyId, query);
   const sortByClause = getSortFragment(query.sortBy);
@@ -176,6 +215,15 @@ export async function listProducts(companyId: number, query: ListProductsQuery):
   };
 }
 
+/**
+ * Returns the distinct set of categories and brands that have at least one
+ * active product for the given company.
+ *
+ * Used by the frontend to populate filter dropdowns in the product catalog.
+ *
+ * @param companyId - Tenant company identifier.
+ * @returns An object with `categories` and `brands` arrays (`{ id, name }`).
+ */
 export async function listProductFilters(companyId: number): Promise<unknown> {
   const [categoryRows, brandRows] = await Promise.all([
     prisma.$queryRaw<Array<FilterRow>>(Prisma.sql`

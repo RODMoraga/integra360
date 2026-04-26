@@ -9,9 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.2.0",
     "axios": "^1.7.9",
     "bootstrap": "^5.3.3",
     "chart.js": "^4.4.7",
+    "datatables.net": "^2.3.7",
+    "datatables.net-dt": "^2.3.7",
+    "jquery": "^4.0.0",
     "pinia": "^2.3.0",
     "sweetalert2": "^11.14.5",
     "tom-select": "^2.6.0",

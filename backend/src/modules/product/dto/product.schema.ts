@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+/**
+ * Zod schema for the product catalog list query parameters.
+ * Supports free-text search, category/brand filtering, pagination,
+ * and column sorting.
+ */
 export const listProductsQuerySchema = z.object({
   q: z.string().trim().optional().default(""),
   categoryId: z.coerce.number().int().positive().optional(),
@@ -10,4 +15,5 @@ export const listProductsQuerySchema = z.object({
   sortOrder: z.enum(["asc", "desc"]).optional().default("asc")
 });
 
+/** TypeScript type inferred from {@link listProductsQuerySchema}. */
 export type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;

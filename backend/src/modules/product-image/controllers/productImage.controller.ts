@@ -17,6 +17,13 @@ import {
   updateProductImage
 } from "../services/productImage.service.js";
 
+/**
+ * Extracts and validates the `x-company-id` header from the request.
+ *
+ * @param req - Express request.
+ * @returns The company ID as a positive integer.
+ * @throws {AppError} 400 Bad Request if the header is absent or not a valid integer.
+ */
 function getCompanyId(req: Request): number {
   const raw = req.header("x-company-id");
   const companyId = Number(raw);
@@ -28,6 +35,14 @@ function getCompanyId(req: Request): number {
   return companyId;
 }
 
+/**
+ * Coerces a boolean-like value to a native `boolean`.
+ * Accepts actual booleans, `"true"` / `"1"` / `"yes"` / `"si"` as truthy,
+ * and `"false"` / `"0"` / `"no"` as falsy.
+ *
+ * @param value    - The value to coerce.
+ * @param fallback - Default value when the input is undefined or unrecognised.
+ */
 function toBoolean(value: boolean | string | undefined, fallback = false): boolean {
   if (typeof value === "boolean") {
     return value;
@@ -46,6 +61,18 @@ function toBoolean(value: boolean | string | undefined, fallback = false): boole
   return fallback;
 }
 
+/**
+ * POST /api/v1/products/:productId/images
+ *
+ * Handles multipart image uploads. Validates the uploaded file and request
+ * body, persists the image record via {@link createProductImage}, and
+ * responds with **201 Created**.
+ * If the database write fails the uploaded file is removed from disk.
+ *
+ * @param req - Express request with a Multer-processed file at `req.file`.
+ * @param res - Express response.
+ * @throws {AppError} 400 if no file was attached to the `"image"` field.
+ */
 export async function uploadProductImage(req: Request, res: Response): Promise<void> {
   const companyId = getCompanyId(req);
   const { productId } = productParamsSchema.parse(req.params);
@@ -85,6 +112,15 @@ export async function uploadProductImage(req: Request, res: Response): Promise<v
   }
 }
 
+/**
+ * GET /api/v1/products/:productId/images
+ *
+ * Lists all active images for a product. Delegates to
+ * {@link listProductImages} and responds with **200 OK**.
+ *
+ * @param req - Express request.
+ * @param res - Express response.
+ */
 export async function getProductImages(req: Request, res: Response): Promise<void> {
   const companyId = getCompanyId(req);
   const { productId } = productParamsSchema.parse(req.params);
@@ -93,6 +129,15 @@ export async function getProductImages(req: Request, res: Response): Promise<voi
   res.status(StatusCodes.OK).json(images);
 }
 
+/**
+ * PATCH /api/v1/products/:productId/images/:imageId
+ *
+ * Updates image metadata fields. Delegates to {@link updateProductImage}
+ * and responds with **204 No Content**.
+ *
+ * @param req - Express request.
+ * @param res - Express response.
+ */
 export async function patchProductImage(req: Request, res: Response): Promise<void> {
   const companyId = getCompanyId(req);
   const { productId, imageId } = productImageParamsSchema.parse(req.params);
@@ -111,6 +156,16 @@ export async function patchProductImage(req: Request, res: Response): Promise<vo
   res.status(StatusCodes.NO_CONTENT).send();
 }
 
+/**
+ * PATCH /api/v1/products/:productId/images/:imageId/primary
+ *
+ * Promotes the specified image to be the primary image for the product.
+ * Delegates to {@link setPrimaryProductImage} and responds with
+ * **204 No Content**.
+ *
+ * @param req - Express request.
+ * @param res - Express response.
+ */
 export async function markPrimaryProductImage(req: Request, res: Response): Promise<void> {
   const companyId = getCompanyId(req);
   const { productId, imageId } = productImageParamsSchema.parse(req.params);
@@ -119,6 +174,16 @@ export async function markPrimaryProductImage(req: Request, res: Response): Prom
   res.status(StatusCodes.NO_CONTENT).send();
 }
 
+/**
+ * DELETE /api/v1/products/:productId/images/:imageId
+ *
+ * Removes the product image record from the database and, when it is the
+ * last reference to the underlying digital asset, deletes the file from
+ * local disk storage. Responds with **204 No Content**.
+ *
+ * @param req - Express request.
+ * @param res - Express response.
+ */
 export async function removeProductImage(req: Request, res: Response): Promise<void> {
   const companyId = getCompanyId(req);
   const { productId, imageId } = productImageParamsSchema.parse(req.params);
